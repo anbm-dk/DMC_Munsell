@@ -1,0 +1,27 @@
+Dato	Objekt	Metode	Reference	Gentagelse	Hex	R	G	B
+2025-02-12	Papir	LandPKS	WhiBal	1	NA	244	237	267
+2025-02-12	Whibal	ColorGrab med reference	Papir	1	#C5C6B2	197	198	178
+2025-02-22	Whibal	ColorGrab med reference	Papir	1	#C6C7B3	NA	NA	NA
+2025-02-22	Whibal	ColorGrab med reference	Papir	2	#D2D0C8	NA	NA	NA
+2025-02-22	Whibal	ColorGrab med reference	Papir	3	#CBCBB5	NA	NA	NA
+2025-02-22	Papir	LandPKS	WhiBal	1	NA	247	237	257
+2025-02-22	Papir	LandPKS	WhiBal	2	NA	236	237	257
+2025-02-22	Papir	LandPKS	WhiBal	3	NA	242	229	261
+2025-02-22	Whibal	ColorGrab uden reference	Billede 1	1	#9F9F98	NA	NA	NA
+2025-02-22	Whibal	ColorGrab uden reference	Billede 1	2	#9F9F99	NA	NA	NA
+2025-02-22	Whibal	ColorGrab uden reference	Billede 1	3	#9F9F9A	NA	NA	NA
+2025-02-22	Papir	ColorGrab uden reference	Billede 1	1	#C3C2C9	NA	NA	NA
+2025-02-22	Papir	ColorGrab uden reference	Billede 1	2	#C0BFC7	NA	NA	NA
+2025-02-22	Papir	ColorGrab uden reference	Billede 1	3	#C0C0CB	NA	NA	NA
+2025-02-22	Whibal	ColorGrab uden reference	Billede 2	1	#B9B2AA	NA	NA	NA
+2025-02-22	Whibal	ColorGrab uden reference	Billede 2	2	#B4B0A7	NA	NA	NA
+2025-02-22	Whibal	ColorGrab uden reference	Billede 2	3	#B0B0A8	NA	NA	NA
+2025-02-22	Papir	ColorGrab uden reference	Billede 2	1	#E2D6E0	NA	NA	NA
+2025-02-22	Papir	ColorGrab uden reference	Billede 2	2	#DAD2DA	NA	NA	NA
+2025-02-22	Papir	ColorGrab uden reference	Billede 2	3	#D2D1D8	NA	NA	NA
+2025-02-22	Whibal	ColorGrab uden reference	Billede 3	1	#8E9191	NA	NA	NA
+2025-02-22	Whibal	ColorGrab uden reference	Billede 3	2	#8D9192	NA	NA	NA
+2025-02-22	Whibal	ColorGrab uden reference	Billede 3	3	#8F9497	NA	NA	NA
+2025-02-22	Papir	ColorGrab uden reference	Billede 3	1	#B5BBCD	NA	NA	NA
+2025-02-22	Papir	ColorGrab uden reference	Billede 3	2	#B7BED0	NA	NA	NA
+2025-02-22	Papir	ColorGrab uden reference	Billede 3	3	#B7BED1	NA	NA	NA
