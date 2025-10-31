@@ -9,6 +9,7 @@ library(spacesXYZ)
 library(circular)
 library(ggplot2)
 library(spacesRGB)
+library(ggrepel)
 
 getwd()
 
@@ -70,31 +71,70 @@ cref_mean <- color_ref %>%
     B = mean(B)
   )
 
+cref_mean
+
 cref_dif <- cref_mean[1:4, -1:-2] / cref_mean[5:8, -1:-2]
 
-cref_sum <- apply(cref_dif, 2, mean)
+cref_dif
+
+cref_sum <- apply(cref_dif[1:3,], 2, mean)
+
+cref_sum
+
+cref_rgb <- 255*cref_sum/max(cref_sum)
+
+cref_rgb
 
 paper_rgb <- cref_mean[4, -1:-2] %>% unlist()
 
+paper_rgb
+
+cref_total <- (cref_rgb + paper_rgb)/2
+
+cref_total
+
 # Standardize my own color measurements
+
+my_colors$Hex_Ego %>%
+  col2rgb() %>%
+  t()
+
+my_colors$Hex_Ego %>%
+  col2rgb() %>%
+  t() %>%
+  as.data.frame() %>%
+  select(blue) %>%
+  unlist() %>%
+  hist()
 
 RGB_ego_cal <- my_colors$Hex_Ego %>%
   col2rgb() %>%
   multiply_by(255) %>%
-  divide_by(paper_rgb) %>%
+  divide_by(cref_total) %>%
   t()
  
 head(RGB_ego_cal)
+
+RGB_ego_cal %>%
+  as.data.frame() %>%
+  filter(red > 255 | green > 255 | blue > 255)
 
 RGB_ego_cal_max <- apply(RGB_ego_cal, 2, max)
 
 RGB_ego_cal_max
 
+RGB_ego_cal_max[RGB_ego_cal_max < 255] <- 255
+
 RGB_ego_cal2 <- RGB_ego_cal %>%
   t() %>%
   multiply_by(255) %>%
   divide_by(RGB_ego_cal_max) %>%
+  # divide_by(max(RGB_ego_cal_max)) %>%
   t()
+
+# RGB_ego_cal2 <- RGB_ego_cal
+
+RGB_ego_cal2[RGB_ego_cal2 > 255] <- 255
 
 head(RGB_ego_cal2)
 
@@ -291,26 +331,114 @@ my_colors %<>%
     HCy = sin(H*2*pi/100)*C,
   )
 
+# Label color
+
+my_colors %<>%
+  mutate(
+    labcol = case_when(
+      V > 5 ~ "black",
+      .default = "white"
+    )
+  )
+
+# my_colors %>%
+#   ggplot(aes(x = HCx, y = HCy, color = I(HEX_mean))) +
+#   geom_point() +
+#   coord_equal()
+
+# my_colors %>%
+#   filter(
+#     V > 4.5,
+#     V < 5.5
+#   ) %>%
+#   ggplot(aes(x = HCx, y = HCy, color = I(HEX_mean))) +
+#   geom_point() +
+#   coord_equal()
+
 my_colors %>%
-  ggplot(aes(x = HCx, y = HCy, color = I(HEX_mean))) +
+  ggplot(aes(x = H, y = C, color = I(HEX_mean))) +
   geom_point() +
-  coord_equal()
+  coord_radial(expand = FALSE) +
+  xlim(c(0, 100))
 
 my_colors %>%
   filter(
-    V > 4,
-    V < 6
+    V > 4.5,
+    V < 5.5
   ) %>%
-  ggplot(aes(x = HCx, y = HCy, color = I(HEX_mean))) +
+  ggplot(aes(x = H, y = C, color = I(HEX_mean))) +
   geom_point() +
-  coord_equal()
+  coord_radial(expand = FALSE) +
+  xlim(c(0, 100))
 
 my_colors %>%
-  filter(H < 10) %>%
-  ggplot(aes(x = C, y = V, color = I(HEX_mean))) +
-  geom_point()
+  filter(H < 2.5) %>%
+  ggplot(
+    aes(
+      x = C,
+      y = V, 
+      fill = I(HEX_mean), 
+      # color = I(labcol), 
+      label = DMC)
+    ) +
+  geom_point(size = 10, shape = 21, color = "black") +
+  geom_text_repel(box.padding = 1, max.overlaps = Inf) +
+  ylim(c(0, 10))
 
 hist(my_colors$H)
+hist(my_colors$V)
+hist(my_colors$C)
+
+my_colors %>%
+  select(H, V, C) %>%
+  as.matrix() %>%
+  MunsellNameFromHVC()
+
+# Hues for plotting
+
+Huestrings <- HueStringFromNumber( seq( 2.5, 100, by=2.5 ) )
+
+Hue_angles <- seq( 2.5, 50, by = 2.5 )*pi/50
+
+my_colors %<>%
+  mutate(
+    H_string = case_when(
+        C >= 0.5 ~ HueStringFromNumber(round(H/2.5)*2.5),
+        .default = "N"
+        )
+  )
+
+i <- 5
+
+# Pseudochroma for N
+
+psC <- function(x, y, R) {
+  out <- sqrt(x^2 + y^2) * cos(R - atan(x/y))
+  return(out)
+}
+
+hstrings_i <- c(Huestrings[i], Huestrings[i + 20], "N")
+
+my_colors %>%
+  filter(H_string %in% hstrings_i) %>%
+  mutate(
+    C = case_when(
+      H_string == hstrings_i[2] ~ C*(-1),
+      H_string == "N" ~ psC(x = HCx, y = HCy, R = Hue_angles[i]),
+      .default = C
+      )
+  ) %>%
+  ggplot(
+    aes(
+      x = C,
+      y = V, 
+      fill = I(HEX_mean), 
+      # color = I(labcol), 
+      label = DMC)
+  ) +
+  geom_point(size = 10, shape = 21, color = "black") +
+  geom_text_repel(box.padding = 1, max.overlaps = Inf) +
+  ylim(c(0, 10))
 
 # Old code
 
