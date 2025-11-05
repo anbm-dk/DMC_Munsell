@@ -10,6 +10,7 @@ library(circular)
 library(ggplot2)
 library(spacesRGB)
 library(ggrepel)
+library(extras)
 
 getwd()
 
@@ -63,6 +64,8 @@ color_ref %<>%
     )
   )
 
+color_ref
+
 cref_mean <- color_ref %>%
   group_by(Objekt, Reference) %>%
   summarise(
@@ -93,11 +96,52 @@ cref_total <- (cref_rgb + paper_rgb)/2
 
 cref_total
 
+# Use Whibal rgb for standardization
+
+Whibal_rgb <- c(192, 192, 192)
+
+Whibal_rgb_logodds <- log_odds(Whibal_rgb/255)
+
+Whibal_rgb_logodds
+
+Whibal_rgb_cg <- unlist(cref_mean[8, -1:-2])
+
+Whibal_rgb_cg
+
+Whibal_rgb_cg_logodds <- log_odds(Whibal_rgb_cg/255)
+
+Whibal_rgb_cg_logodds
+
+Whibal_rgb_diff_linear <- Whibal_rgb_cg - Whibal_rgb
+
+Whibal_rgb_diff_linear
+
+Whibal_rgb_diff_logodds <- Whibal_rgb_cg_logodds - Whibal_rgb_logodds
+
+Whibal_rgb_diff_logodds
+
 # Standardize my own color measurements
 
 my_colors$Hex_Ego %>%
   col2rgb() %>%
-  t()
+  t() %>%
+  head()
+
+my_colors$Hex_Ego %>%
+  col2rgb() %>%
+  t() %>%
+  as.data.frame() %>%
+  select(red) %>%
+  unlist() %>%
+  hist()
+
+my_colors$Hex_Ego %>%
+  col2rgb() %>%
+  t() %>%
+  as.data.frame() %>%
+  select(green) %>%
+  unlist() %>%
+  hist()
 
 my_colors$Hex_Ego %>%
   col2rgb() %>%
@@ -107,17 +151,32 @@ my_colors$Hex_Ego %>%
   unlist() %>%
   hist()
 
+# RGB_ego_cal <- my_colors$Hex_Ego %>%
+#   col2rgb() %>%
+#   multiply_by(255) %>%
+#   divide_by(cref_total) %>%
+#   t()
+ 
+# Use logit (log odds) standardization instead
+
 RGB_ego_cal <- my_colors$Hex_Ego %>%
   col2rgb() %>%
-  multiply_by(255) %>%
-  divide_by(cref_total) %>%
-  t()
- 
+  divide_by(255) %>%
+  log_odds() %>%
+  subtract(Whibal_rgb_diff_logodds) %>%
+  inv_logit() %>%
+  t() %>%
+  multiply_by(255)
+
 head(RGB_ego_cal)
 
 RGB_ego_cal %>%
   as.data.frame() %>%
   filter(red > 255 | green > 255 | blue > 255)
+
+RGB_ego_cal[, 1] %>% hist()
+RGB_ego_cal[, 2] %>% hist()
+RGB_ego_cal[, 3] %>% hist()
 
 RGB_ego_cal_max <- apply(RGB_ego_cal, 2, max)
 
@@ -149,36 +208,38 @@ head(my_colors)
 # SP colors (kind of drab)
 
 my_colors %>%
-  ggplot(aes(x = Kolonne, y = Række, color = I(Hex_SP))) +
-  geom_point() +
+  ggplot(aes(x = Kolonne, y = Række, fill = I(Hex_SP))) +
+  geom_raster() +
   ggtitle("Hex_SP") +
   scale_y_reverse()
 
 # SF colors (ok)
 
 my_colors %>%
-  ggplot(aes(x = Kolonne, y = Række, color = I(Hex_SF))) +
-  geom_point() +
+  ggplot(aes(x = Kolonne, y = Række, fill = I(Hex_SF))) +
+  geom_raster() +
   ggtitle("Hex_SF") +
   scale_y_reverse()
 
 # CAZ colors (also kind of drab)
 
 my_colors %>%
-  ggplot(aes(x = Kolonne, y = Række, color = I(Hex_CAZ))) +
-  geom_point() +
+  ggplot(aes(x = Kolonne, y = Række, fill = I(Hex_CAZ))) +
+  geom_raster() +
   ggtitle("Hex_CAZ") +
   scale_y_reverse()
 
 # My colors (most vivid)
 
 my_colors %>%
-  ggplot(aes(x = Kolonne, y = Række, color = I(HEX_ego_cal))) +
-  geom_point() +
+  ggplot(aes(x = Kolonne, y = Række, fill = I(HEX_ego_cal))) +
+  geom_raster() +
   ggtitle("HEX_ego_cal") +
   scale_y_reverse()
 
-# I should only use SF and my own colors. The other ones are too greyish.
+# I first thought that I should only use SF and my own colors, as tthe other
+# ones were too greyish. However, using all the colors gives a better alignment
+# with the relative differences between them when calculating the average.
 
 # Pivot longer
 
@@ -238,11 +299,11 @@ left_join(
 
 # SF and CAZ have the largest deviations from the mean values.
 
-my_colors_RGB %<>%
-  filter(
-    Source != "Hex_CAZ",
-    Source != "Hex_SP"
-  )
+# my_colors_RGB %<>%
+#   filter(
+#     Source != "Hex_CAZ",
+#     Source != "Hex_SP"
+#   )
 
 # Convert to XYZ 
 
@@ -252,7 +313,7 @@ my_colors_XYZ <- my_colors_RGB %>%
   XYZfromRGB(maxSignal = 255) %>%
   extract2(2)
 
-plot(as.data.frame(my_colors_XYZ))
+# plot(as.data.frame(my_colors_XYZ))
 
 my_colors_XYZ <- bind_cols(my_colors_RGB, my_colors_XYZ)
 
@@ -266,7 +327,7 @@ my_colors_XYZ_mean <- my_colors_XYZ %>%
     Z = mean(Z)
   )
 
-plot(my_colors_XYZ_mean)
+# plot(my_colors_XYZ_mean)
 
 # Calculate HEX for mean values
 
@@ -290,11 +351,10 @@ my_colors_XYZ_mean$HEX <- HEX_mean
 my_colors$HEX_mean <- HEX_mean
 
 my_colors %>%
-  ggplot(aes(x = Kolonne, y = Række, color = I(HEX_mean))) +
-  geom_point() +
+  ggplot(aes(x = Kolonne, y = Række, fill = I(HEX_mean))) +
+  geom_raster() +
   ggtitle("HEX_mean") +
   scale_y_reverse()
-
 
 # Convert HEX to Munsell
 
@@ -413,18 +473,29 @@ i <- 5
 # Pseudochroma for N
 
 psC <- function(x, y, R) {
-  out <- sqrt(x^2 + y^2) * cos(R - atan(x/y))
+  out <- sqrt(x^2 + y^2) * cos(R - atan(y/x))
+  return(out)
+}
+
+# Distance from Hue angle
+
+get_distH <- function(x, y, R) {
+  out <- sqrt(x^2 + y^2) * sin(R - atan(y/x))
   return(out)
 }
 
 hstrings_i <- c(Huestrings[i], Huestrings[i + 20], "N")
 
 my_colors %>%
-  filter(H_string %in% hstrings_i) %>%
+  mutate(distH = get_distH(x = HCx, y = HCy, R = Hue_angles[i])) %>%
+  filter(
+    H_string %in% hstrings_i | (distH < 0.5 & distH > -0.5)
+    ) %>%
   mutate(
+    distC = psC(x = HCx, y = HCy, R = Hue_angles[i]),
     C = case_when(
       H_string == hstrings_i[2] ~ C*(-1),
-      H_string == "N" ~ psC(x = HCx, y = HCy, R = Hue_angles[i]),
+      !(H_string %in% hstrings_i[1:2]) ~ distC,
       .default = C
       )
   ) %>%
@@ -441,9 +512,9 @@ my_colors %>%
   ylim(c(0, 10))
 
 # Old code
-
+# 
 # Convert to Munsell values
-
+# 
 # hues <- mnsl_hues()
 # 
 # my_colors_HVC <- my_colors_RGB %>%
