@@ -1,5 +1,11 @@
 # Calculation and illustration of MUnsell colors for DMC floss
 
+# To do:
+# - Fix color labels/text positions
+# - Add hue labels to value slices ("radial" plots)
+# - Fix aspect ratio for hue slices.
+# - Create chroma slices
+
 library(magrittr)
 library(dplyr)
 library(tidyr)
@@ -11,6 +17,10 @@ library(ggplot2)
 library(spacesRGB)
 library(ggrepel)
 library(extras)
+library(sf) # For minimum bounding circle
+library(ggforce)
+library(autoimage) # For rotating coordinates
+library(tibble)
 
 getwd()
 
@@ -131,7 +141,7 @@ my_colors$Hex_Ego %>%
   col2rgb() %>%
   t() %>%
   as.data.frame() %>%
-  select(red) %>%
+  dplyr::select(red) %>%
   unlist() %>%
   hist()
 
@@ -139,7 +149,7 @@ my_colors$Hex_Ego %>%
   col2rgb() %>%
   t() %>%
   as.data.frame() %>%
-  select(green) %>%
+  dplyr::select(green) %>%
   unlist() %>%
   hist()
 
@@ -147,7 +157,7 @@ my_colors$Hex_Ego %>%
   col2rgb() %>%
   t() %>%
   as.data.frame() %>%
-  select(blue) %>%
+  dplyr::select(blue) %>%
   unlist() %>%
   hist()
 
@@ -245,7 +255,7 @@ my_colors %>%
 
 my_colors_RGB <- my_colors %>%
   filter(!DMC %in% discontinued) %>% 
-  select(
+  dplyr::select(
     DMC, Floss.Name, Kolonne, Række, 
     Hex_SP,
     Hex_SF, 
@@ -308,7 +318,7 @@ left_join(
 # Convert to XYZ 
 
 my_colors_XYZ <- my_colors_RGB %>%
-  select(R, G, B) %>%
+  dplyr::select(R, G, B) %>%
   as.matrix() %>%
   XYZfromRGB(maxSignal = 255) %>%
   extract2(2)
@@ -332,7 +342,7 @@ my_colors_XYZ_mean <- my_colors_XYZ %>%
 # Calculate HEX for mean values
 
 HEX_mean <- my_colors_XYZ_mean %>%
-  select(-DMC) %>%
+  dplyr::select(-DMC) %>%
   as.matrix() %>%
   RGBfromXYZ(maxSignal = 255) %>%
   extract2(1) %>%
@@ -340,7 +350,7 @@ HEX_mean <- my_colors_XYZ_mean %>%
   mutate(
     HEX = rgb(R, G, B, maxColorValue = 255)
   ) %>%
-  select(HEX) %>%
+  dplyr::select(HEX) %>%
   unlist() %>%
   unname()
 
@@ -385,11 +395,59 @@ my_colors %>%
 
 # Hue/Chroma coordinates
 
+Hue_to_radians <- function(Hue) {
+  radians <- Hue %>%
+    multiply_by(-1) %>%
+    # add(100) %>%
+    add(30) %>%
+    divide_by(100) %>%
+    multiply_by(2*pi)
+  radians[radians > pi] <- radians[radians > pi] - 2*pi
+  radians[radians < -pi] <- radians[radians < -pi] + 2*pi
+  return(radians)
+}
+
+Hue_to_radians(seq(0, 100, 10)) %>% plot()
+
 my_colors %<>%
   mutate(
-    HCx = cos(H*2*pi/100)*C,
-    HCy = sin(H*2*pi/100)*C,
+    H_rad = Hue_to_radians(H),
+    HCx = cos(H_rad)*C,
+    HCy = sin(H_rad)*C,
   )
+
+# Minimum bounding circle
+
+circle_min <- my_colors %>%
+  dplyr::select(HCx, HCy) %>%
+  as.matrix() %>%
+  st_multipoint() %>%
+  st_minimum_bounding_circle()
+
+plot(circle_min)
+points(my_colors$HCx, my_colors$HCy)
+
+circle_min_center <- circle_min %>% 
+  st_centroid() %>%
+  as.vector() %>%
+  round() %>%
+  t() %>%
+  as.data.frame() %>%
+  set_colnames(c("HCx", "HCy"))
+
+circle_min_radius <- circle_min %>%
+  st_area() %>%
+  divide_by(pi) %>%
+  sqrt() %>%
+  ceiling()
+
+my_xlims <- circle_min_center[, 1] %>%
+  unlist() %>%
+  add(c(-circle_min_radius, circle_min_radius))
+
+my_ylims <- circle_min_center[, 2] %>%
+  unlist() %>%
+  add(c(-circle_min_radius, circle_min_radius))
 
 # Label color
 
@@ -401,19 +459,7 @@ my_colors %<>%
     )
   )
 
-# my_colors %>%
-#   ggplot(aes(x = HCx, y = HCy, color = I(HEX_mean))) +
-#   geom_point() +
-#   coord_equal()
-
-# my_colors %>%
-#   filter(
-#     V > 4.5,
-#     V < 5.5
-#   ) %>%
-#   ggplot(aes(x = HCx, y = HCy, color = I(HEX_mean))) +
-#   geom_point() +
-#   coord_equal()
+# Radial coordinates
 
 my_colors %>%
   ggplot(aes(x = H, y = C, color = I(HEX_mean))) +
@@ -450,15 +496,19 @@ hist(my_colors$V)
 hist(my_colors$C)
 
 my_colors %>%
-  select(H, V, C) %>%
+  dplyr::select(H, V, C) %>%
   as.matrix() %>%
   MunsellNameFromHVC()
 
 # Hues for plotting
 
-Huestrings <- HueStringFromNumber( seq( 2.5, 100, by=2.5 ) )
+Huestrings <- HueStringFromNumber(seq(2.5, 100, by = 2.5))
 
-Hue_angles <- seq( 2.5, 50, by = 2.5 )*pi/50
+Huestrings
+
+Hue_angles <- Hue_to_radians(seq(2.5, 50, by = 2.5))
+
+Hue_angles
 
 my_colors %<>%
   mutate(
@@ -466,9 +516,17 @@ my_colors %<>%
         C >= 0.5 ~ HueStringFromNumber(round(H/2.5)*2.5),
         .default = "N"
         )
-  )
+  ) %>%
+  rownames_to_column()
 
-i <- 5
+my_colors %>%
+  dplyr::select(HCx, HCy) %>% head()
+
+my_colors %>%
+  dplyr::select(HCx, HCy) %>%
+  as.matrix() %>%
+  rotate(theta = pi/2, pivot = c(0,0)) %>% head()
+
 
 # Pseudochroma for N
 
@@ -484,20 +542,29 @@ get_distH <- function(x, y, R) {
   return(out)
 }
 
+i <- 8
+
 hstrings_i <- c(Huestrings[i], Huestrings[i + 20], "N")
 
+HC_coords_i <- my_colors %>%
+  dplyr::select(HCx, HCy) %>%
+  as.matrix() %>%
+  rotate(theta = -Hue_angles[i], pivot = c(0,0)) %>%
+  set_colnames(c("x_i", "y_i"))
+
 my_colors %>%
-  mutate(distH = get_distH(x = HCx, y = HCy, R = Hue_angles[i])) %>%
-  filter(
-    H_string %in% hstrings_i | (distH < 0.5 & distH > -0.5)
-    ) %>%
+  bind_cols(HC_coords_i) %>%
   mutate(
-    distC = psC(x = HCx, y = HCy, R = Hue_angles[i]),
+    distH = y_i,
+    distC = x_i,
     C = case_when(
       H_string == hstrings_i[2] ~ C*(-1),
       !(H_string %in% hstrings_i[1:2]) ~ distC,
       .default = C
-      )
+    )
+  ) %>%
+  filter(
+    H_string %in% hstrings_i | (distH < 0.5 & distH > -0.5)
   ) %>%
   ggplot(
     aes(
@@ -510,6 +577,139 @@ my_colors %>%
   geom_point(size = 10, shape = 21, color = "black") +
   geom_text_repel(box.padding = 1, max.overlaps = Inf) +
   ylim(c(0, 10))
+
+# XY coordinates
+
+extra_cirlces <- data_frame(
+  HCx = 0,
+  HCy = 0,
+  r = seq(2, 18, 2)
+)
+
+value_text_pos <- data.frame(
+  HCx = 0,
+  HCy = seq(2, 18, 2)
+)
+
+my_colors %>%
+  ggplot(
+    aes(x = HCx, 
+        y = HCy, 
+        color = I(HEX_mean), 
+        fill = I(HEX_mean)
+        )
+    ) +
+  geom_circle(
+    data = circle_min_center,
+    color = NA,
+    fill = "grey92",
+    aes(x0 = HCx, y0 = HCy, r = circle_min_radius, label = NA)
+  ) +
+  geom_circle(
+    data = extra_cirlces,
+    color = "white",
+    fill = NA,
+    aes(x0 = HCx, y0 = HCy, r = r, label = NA)
+  ) +
+  geom_hline(color = "white", yintercept = 0) +
+  geom_abline(intercept = 0, slope = tan(pi*-2.5/5), color = "white") +
+  geom_abline(intercept = 0, slope = tan(pi*-1.5/5), color = "white") +
+  geom_abline(intercept = 0, slope = tan(pi*0.5/5), color = "white") +
+  geom_abline(intercept = 0, slope = tan(pi*-0.5/5), color = "white") +
+  geom_abline(intercept = 0, slope = tan(pi*2.5/5), color = "white") +
+  geom_point(
+    data = value_text_pos,
+    size = 10, 
+    shape = 21, 
+    color = "white",
+    fill = "grey92"
+  ) +
+  geom_text(
+    data = value_text_pos,
+    col = "grey",
+    aes(label = HCy, fill = "NA")
+  ) +
+  geom_point(shape = 21, color = "black", size = 3, label = NA) +
+  coord_equal(xlim = my_xlims, ylim = my_ylims) +
+  theme(
+    axis.line = element_blank(),
+    axis.text.x = element_blank(),
+    axis.text.y = element_blank(),
+    axis.ticks = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    legend.position = "none",
+    panel.background = element_blank(),
+    panel.border = element_blank(),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    plot.background = element_blank()
+  )
+
+# Value slice
+
+my_colors %>%
+  filter(
+    V > 4.5,
+    V < 5.5
+  ) %>%
+  ggplot(
+    aes(x = HCx, 
+        y = HCy, 
+        color = I(HEX_mean), 
+        fill = I(HEX_mean)
+        )
+    ) +
+  geom_circle(
+    data = circle_min_center,
+    color = NA,
+    fill = "grey92",
+    aes(x0 = HCx, y0 = HCy, r = circle_min_radius, label = NA)
+  ) +
+  geom_circle(
+    data = extra_cirlces,
+    color = "white",
+    fill = NA,
+    aes(x0 = HCx, y0 = HCy, r = r, label = NA)
+  ) +
+  geom_hline(color = "white", yintercept = 0) +
+  geom_abline(intercept = 0, slope = tan(pi*-2.5/5), color = "white") +
+  geom_abline(intercept = 0, slope = tan(pi*-1.5/5), color = "white") +
+  geom_abline(intercept = 0, slope = tan(pi*0.5/5), color = "white") +
+  geom_abline(intercept = 0, slope = tan(pi*-0.5/5), color = "white") +
+  geom_abline(intercept = 0, slope = tan(pi*2.5/5), color = "white") +
+  geom_point(
+    data = value_text_pos,
+    size = 10, 
+    shape = 21, 
+    color = "white",
+    fill = "grey92",
+    label = NA
+  ) +
+  geom_text(
+    data = value_text_pos,
+    col = "grey",
+    aes(label = HCy, fill = "NA")
+  ) +
+  geom_point(size = 10, shape = 21, color = "black", label = NA) +
+  geom_text_repel(box.padding = 1, max.overlaps = Inf, color = "black",
+                  aes(label = DMC, color = "black")) +
+  coord_equal(xlim = my_xlims, ylim = my_ylims) +
+  theme(
+    axis.line = element_blank(),
+    axis.text.x = element_blank(),
+    axis.text.y = element_blank(),
+    axis.ticks = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    legend.position = "none",
+    panel.background = element_blank(),
+    panel.border = element_blank(),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    plot.background = element_blank()
+  )
+
 
 # Old code
 # 
