@@ -21,6 +21,7 @@ library(sf) # For minimum bounding circle
 library(ggforce)
 library(autoimage) # For rotating coordinates
 library(tibble)
+library(pcds)  # For intersecting lines and circles
 
 getwd()
 
@@ -372,7 +373,8 @@ my_colors_Munsell <- HEX_mean %>%
   col2rgb() %>%
   t() %>%
   RGBtoMunsell() %>%
-  as.data.frame()
+  as.data.frame() %>%
+  rownames_to_column()
 
 my_colors <- bind_cols(my_colors, my_colors_Munsell)
 
@@ -380,14 +382,20 @@ head(my_colors)
 
 # Preliminary plots
 
+# Value and chroma
+
 my_colors %>%
   ggplot(aes(x = C, y = V, color = I(HEX_mean))) +
   geom_point() +
   coord_equal()
 
+# Hue and value
+
 my_colors %>%
   ggplot(aes(x = H, y = V, color = I(HEX_mean))) +
   geom_point()
+
+# Hue and chroma
 
 my_colors %>%
   ggplot(aes(x = H, y = C, color = I(HEX_mean))) +
@@ -443,11 +451,11 @@ circle_min_radius <- circle_min %>%
 
 my_xlims <- circle_min_center[, 1] %>%
   unlist() %>%
-  add(c(-circle_min_radius, circle_min_radius))
+  add(c(-circle_min_radius - 2, circle_min_radius + 2))
 
 my_ylims <- circle_min_center[, 2] %>%
-  unlist() %>%
-  add(c(-circle_min_radius, circle_min_radius))
+  unlist()  %>%
+  add(c(-circle_min_radius - 2, circle_min_radius + 2))
 
 # Label color
 
@@ -476,6 +484,8 @@ my_colors %>%
   geom_point() +
   coord_radial(expand = FALSE) +
   xlim(c(0, 100))
+
+# Preliminary hue slice
 
 my_colors %>%
   filter(H < 2.5) %>%
@@ -516,8 +526,7 @@ my_colors %<>%
         C >= 0.5 ~ HueStringFromNumber(round(H/2.5)*2.5),
         .default = "N"
         )
-  ) %>%
-  rownames_to_column()
+  )
 
 my_colors %>%
   dplyr::select(HCx, HCy) %>% head()
@@ -527,20 +536,6 @@ my_colors %>%
   as.matrix() %>%
   rotate(theta = pi/2, pivot = c(0,0)) %>% head()
 
-
-# Pseudochroma for N
-
-psC <- function(x, y, R) {
-  out <- sqrt(x^2 + y^2) * cos(R - atan(y/x))
-  return(out)
-}
-
-# Distance from Hue angle
-
-get_distH <- function(x, y, R) {
-  out <- sqrt(x^2 + y^2) * sin(R - atan(y/x))
-  return(out)
-}
 
 i <- 8
 
@@ -580,13 +575,45 @@ my_colors %>%
 
 # XY coordinates
 
+# Points for hue labels
+
+hue_lab_pts <- Hue_to_radians(seq(5, 55, by = 10)) %>%
+  magrittr::extract(-length(.)) %>%
+  lapply(
+    function(x) {
+      line_pts <- rotate(matrix(c(100, -100, 0, 0), ncol = 2), x) 
+      out <- intersect.line.circle(
+          p1 = line_pts[1, ], 
+          p2 = line_pts[2, ], 
+          cent = unlist(circle_min_center), 
+          rad =circle_min_radius + 1
+        ) %>%
+        as.data.frame() %>%
+        set_colnames(c("HCx", "HCy"))
+      return(out)
+    }
+  ) %>%
+  bind_rows() %>%
+  rowid_to_column() %>%
+  mutate(
+    hue_lab = c("R", "BG", "YR", "B", "Y", "PB", "GY", "P", "G", "RP")
+  )
+
+hue_lab_pts
+
+
+
+# Circles for chroma scale
+
 extra_cirlces <- data_frame(
   HCx = 0,
   HCy = 0,
   r = seq(2, 18, 2)
 )
 
-value_text_pos <- data.frame(
+# Points for chroma scale
+
+chroma_text_pos <- data.frame(
   HCx = 0,
   HCy = seq(2, 18, 2)
 )
@@ -595,41 +622,47 @@ my_colors %>%
   ggplot(
     aes(x = HCx, 
         y = HCy, 
-        color = I(HEX_mean), 
-        fill = I(HEX_mean)
+        # color = I(HEX_mean), 
+        # fill = I(HEX_mean)
         )
     ) +
   geom_circle(
     data = circle_min_center,
     color = NA,
     fill = "grey92",
-    aes(x0 = HCx, y0 = HCy, r = circle_min_radius, label = NA)
+    aes(x0 = HCx, y0 = HCy, r = circle_min_radius)
   ) +
   geom_circle(
     data = extra_cirlces,
     color = "white",
     fill = NA,
-    aes(x0 = HCx, y0 = HCy, r = r, label = NA)
+    aes(x0 = HCx, y0 = HCy, r = r)
   ) +
   geom_hline(color = "white", yintercept = 0) +
   geom_abline(intercept = 0, slope = tan(pi*-2.5/5), color = "white") +
   geom_abline(intercept = 0, slope = tan(pi*-1.5/5), color = "white") +
-  geom_abline(intercept = 0, slope = tan(pi*0.5/5), color = "white") +
   geom_abline(intercept = 0, slope = tan(pi*-0.5/5), color = "white") +
+  geom_abline(intercept = 0, slope = tan(pi*0.5/5), color = "white") +
+  geom_abline(intercept = 0, slope = tan(pi*1.5/5), color = "white") +
   geom_abline(intercept = 0, slope = tan(pi*2.5/5), color = "white") +
   geom_point(
-    data = value_text_pos,
+    data = chroma_text_pos,
     size = 10, 
     shape = 21, 
     color = "white",
     fill = "grey92"
   ) +
   geom_text(
-    data = value_text_pos,
+    data = chroma_text_pos,
     col = "grey",
-    aes(label = HCy, fill = "NA")
+    fill = NA,
+    aes(label = HCy)
   ) +
-  geom_point(shape = 21, color = "black", size = 3, label = NA) +
+  geom_text(
+    data = hue_lab_pts,
+    col = "black",
+    aes(label = hue_lab)) +
+  geom_point(shape = 21, color = "black", size = 3, aes(fill = I(HEX_mean))) +
   coord_equal(xlim = my_xlims, ylim = my_ylims) +
   theme(
     axis.line = element_blank(),
@@ -657,7 +690,7 @@ my_colors %>%
     aes(x = HCx, 
         y = HCy, 
         color = I(HEX_mean), 
-        fill = I(HEX_mean)
+        
         )
     ) +
   geom_circle(
@@ -675,11 +708,12 @@ my_colors %>%
   geom_hline(color = "white", yintercept = 0) +
   geom_abline(intercept = 0, slope = tan(pi*-2.5/5), color = "white") +
   geom_abline(intercept = 0, slope = tan(pi*-1.5/5), color = "white") +
-  geom_abline(intercept = 0, slope = tan(pi*0.5/5), color = "white") +
   geom_abline(intercept = 0, slope = tan(pi*-0.5/5), color = "white") +
+  geom_abline(intercept = 0, slope = tan(pi*0.5/5), color = "white") +
+  geom_abline(intercept = 0, slope = tan(pi*1.5/5), color = "white") +
   geom_abline(intercept = 0, slope = tan(pi*2.5/5), color = "white") +
   geom_point(
-    data = value_text_pos,
+    data = chroma_text_pos,
     size = 10, 
     shape = 21, 
     color = "white",
@@ -689,9 +723,13 @@ my_colors %>%
   geom_text(
     data = value_text_pos,
     col = "grey",
-    aes(label = HCy, fill = "NA")
+    aes(label = HCy)
   ) +
-  geom_point(size = 10, shape = 21, color = "black", label = NA) +
+  geom_text(
+    data = hue_lab_pts,
+    col = "black",
+    aes(label = hue_lab)) +
+  geom_point(size = 10, shape = 21, color = "black", label = NA, aes(fill = I(HEX_mean))) +
   geom_text_repel(box.padding = 1, max.overlaps = Inf, color = "black",
                   aes(label = DMC, color = "black")) +
   coord_equal(xlim = my_xlims, ylim = my_ylims) +
