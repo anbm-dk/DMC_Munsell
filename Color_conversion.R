@@ -380,27 +380,6 @@ my_colors <- bind_cols(my_colors, my_colors_Munsell)
 
 head(my_colors)
 
-# Preliminary plots
-
-# Value and chroma
-
-my_colors %>%
-  ggplot(aes(x = C, y = V, color = I(HEX_mean))) +
-  geom_point() +
-  coord_equal()
-
-# Hue and value
-
-my_colors %>%
-  ggplot(aes(x = H, y = V, color = I(HEX_mean))) +
-  geom_point()
-
-# Hue and chroma
-
-my_colors %>%
-  ggplot(aes(x = H, y = C, color = I(HEX_mean))) +
-  geom_point()
-
 # Hue/Chroma coordinates
 
 Hue_to_radians <- function(Hue) {
@@ -467,39 +446,6 @@ my_colors %<>%
     )
   )
 
-# Radial coordinates
-
-my_colors %>%
-  ggplot(aes(x = H, y = C, color = I(HEX_mean))) +
-  geom_point() +
-  coord_radial(expand = FALSE) +
-  xlim(c(0, 100))
-
-my_colors %>%
-  filter(
-    V > 4.5,
-    V < 5.5
-  ) %>%
-  ggplot(aes(x = H, y = C, color = I(HEX_mean))) +
-  geom_point() +
-  coord_radial(expand = FALSE) +
-  xlim(c(0, 100))
-
-# Preliminary hue slice
-
-my_colors %>%
-  filter(H < 2.5) %>%
-  ggplot(
-    aes(
-      x = C,
-      y = V, 
-      fill = I(HEX_mean), 
-      # color = I(labcol), 
-      label = DMC)
-    ) +
-  geom_point(size = 10, shape = 21, color = "black") +
-  geom_text_repel(box.padding = 1, max.overlaps = Inf) +
-  ylim(c(0, 10))
 
 hist(my_colors$H)
 hist(my_colors$V)
@@ -547,7 +493,7 @@ HC_coords_i <- my_colors %>%
   rotate(theta = -Hue_angles[i], pivot = c(0,0)) %>%
   set_colnames(c("x_i", "y_i"))
 
-my_colors %>%
+plot_colors_i <- my_colors %>%
   bind_cols(HC_coords_i) %>%
   mutate(
     distH = y_i,
@@ -560,20 +506,72 @@ my_colors %>%
   ) %>%
   filter(
     H_string %in% hstrings_i | (distH < 0.5 & distH > -0.5)
+  )
+
+mindist_i <- plot_colors_i %>%
+  dplyr::select(C, V) %>%
+  mutate(C = C*2) %>%
+dist(
+  diag = FALSE,
+  upper = TRUE
+) %>%
+  as.matrix()
+
+diag(mindist_i) <- NA
+
+mindist_i %<>%
+  apply(1, function(x) {min(x, na.rm = TRUE)})
+
+plot_colors_i_text <- plot_colors_i %>%
+  mutate(
+    mindist_i = mindist_i
   ) %>%
+  filter(mindist_i > 0.5)
+
+plot_colors_i_label <- plot_colors_i %>%
+  mutate(
+    mindist_i = mindist_i,
+    DMC = case_when(
+      mindist_i > 0.5 ~ "",
+      .default = DMC
+    )
+  )
+
+plot_colors_i %>%
   ggplot(
     aes(
       x = C,
       y = V, 
       fill = I(HEX_mean), 
       # color = I(labcol), 
-      label = DMC)
+      label = DMC,
+      group = -1L
+      )
   ) +
-  geom_point(size = 10, shape = 21, color = "black") +
-  geom_text_repel(box.padding = 1, max.overlaps = Inf) +
-  ylim(c(0, 10))
+  # geom_point(size = 10, shape = 21, color = "black") +
+  geom_voronoi_tile(
+    aes(fill = I(HEX_mean)),
+    color = 'black',
+    # normalize = TRUE,
+    max.radius = 0.5
+  ) +
+  geom_text(
+    data = plot_colors_i_text,
+    aes(color = I(labcol)),
+    size = 3
+  ) +
+  geom_text_repel(
+    data = plot_colors_i_label, 
+    box.padding = 0.5,
+    max.overlaps = Inf,
+    point.padding = 0.75,
+    size = 3,
+    min.segment.length = 0
+    ) +
+  ylim(c(-0.5, 10.5)) +
+  coord_fixed(1)
 
-# XY coordinates
+# Preparation for Value slices
 
 # Points for hue labels
 
@@ -602,7 +600,6 @@ hue_lab_pts <- Hue_to_radians(seq(5, 55, by = 10)) %>%
 hue_lab_pts
 
 
-
 # Circles for chroma scale
 
 extra_cirlces <- data_frame(
@@ -624,7 +621,8 @@ my_colors %>%
         y = HCy, 
         # color = I(HEX_mean), 
         # fill = I(HEX_mean)
-        )
+        ),
+    gr
     ) +
   geom_circle(
     data = circle_min_center,
@@ -662,7 +660,13 @@ my_colors %>%
     data = hue_lab_pts,
     col = "black",
     aes(label = hue_lab)) +
-  geom_point(shape = 21, color = "black", size = 3, aes(fill = I(HEX_mean))) +
+  # geom_point(shape = 21, color = "black", size = 3, aes(fill = I(HEX_mean))) +
+  geom_voronoi_tile(
+    aes(fill = I(HEX_mean)),
+    color = 'black',
+    # normalize = TRUE,
+    max.radius = 0.5
+  ) +
   coord_equal(xlim = my_xlims, ylim = my_ylims) +
   theme(
     axis.line = element_blank(),
@@ -679,6 +683,7 @@ my_colors %>%
     plot.background = element_blank()
   )
 
+
 # Value slice
 
 my_colors %>%
@@ -688,22 +693,22 @@ my_colors %>%
   ) %>%
   ggplot(
     aes(x = HCx, 
-        y = HCy, 
-        color = I(HEX_mean), 
-        
+        y = HCy
+        # color = I(HEX_mean), 
+        , group = -1L
         )
     ) +
   geom_circle(
     data = circle_min_center,
     color = NA,
     fill = "grey92",
-    aes(x0 = HCx, y0 = HCy, r = circle_min_radius, label = NA)
+    aes(x0 = HCx, y0 = HCy, r = circle_min_radius)
   ) +
   geom_circle(
     data = extra_cirlces,
     color = "white",
     fill = NA,
-    aes(x0 = HCx, y0 = HCy, r = r, label = NA)
+    aes(x0 = HCx, y0 = HCy, r = r)
   ) +
   geom_hline(color = "white", yintercept = 0) +
   geom_abline(intercept = 0, slope = tan(pi*-2.5/5), color = "white") +
@@ -714,14 +719,13 @@ my_colors %>%
   geom_abline(intercept = 0, slope = tan(pi*2.5/5), color = "white") +
   geom_point(
     data = chroma_text_pos,
-    size = 10, 
-    shape = 21, 
+    size = 10,
+    shape = 21,
     color = "white",
-    fill = "grey92",
-    label = NA
+    fill = "grey92"
   ) +
   geom_text(
-    data = value_text_pos,
+    data = chroma_text_pos,
     col = "grey",
     aes(label = HCy)
   ) +
@@ -729,7 +733,13 @@ my_colors %>%
     data = hue_lab_pts,
     col = "black",
     aes(label = hue_lab)) +
-  geom_point(size = 10, shape = 21, color = "black", label = NA, aes(fill = I(HEX_mean))) +
+  # geom_point(size = 10, shape = 21, color = "black", aes(fill = I(HEX_mean))) +
+  geom_voronoi_tile(
+    aes(fill = I(HEX_mean)),
+    color = 'black',
+    # normalize = TRUE,
+    max.radius = 0.5
+    ) +
   geom_text_repel(box.padding = 1, max.overlaps = Inf, color = "black",
                   aes(label = DMC, color = "black")) +
   coord_equal(xlim = my_xlims, ylim = my_ylims) +
@@ -831,5 +841,61 @@ my_colors %>%
 # 
 # my_colors_HVC %>%
 #   apply(2, max)
+
+# # Preliminary plots
+# 
+# # Value and chroma
+# 
+# my_colors %>%
+#   ggplot(aes(x = C, y = V, color = I(HEX_mean))) +
+#   geom_point() +
+#   coord_equal()
+# 
+# # Hue and value
+# 
+# my_colors %>%
+#   ggplot(aes(x = H, y = V, color = I(HEX_mean))) +
+#   geom_point()
+# 
+# # Hue and chroma
+# 
+# my_colors %>%
+#   ggplot(aes(x = H, y = C, color = I(HEX_mean))) +
+#   geom_point()
+
+# # Radial coordinates
+# 
+# my_colors %>%
+#   ggplot(aes(x = H, y = C, color = I(HEX_mean))) +
+#   geom_point() +
+#   coord_radial(expand = FALSE) +
+#   xlim(c(0, 100))
+# 
+# my_colors %>%
+#   filter(
+#     V > 4.5,
+#     V < 5.5
+#   ) %>%
+#   ggplot(aes(x = H, y = C, color = I(HEX_mean))) +
+#   geom_point() +
+#   coord_radial(expand = FALSE) +
+#   xlim(c(0, 100))
+# 
+# # Preliminary hue slice
+# 
+# my_colors %>%
+#   filter(H < 2.5) %>%
+#   ggplot(
+#     aes(
+#       x = C,
+#       y = V, 
+#       fill = I(HEX_mean), 
+#       # color = I(labcol), 
+#       label = DMC)
+#   ) +
+#   geom_point(size = 10, shape = 21, color = "black") +
+#   geom_text_repel(box.padding = 1, max.overlaps = Inf) +
+#   ylim(c(0, 10))
+
 
 # END
