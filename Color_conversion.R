@@ -22,10 +22,16 @@ library(ggforce)
 library(autoimage) # For rotating coordinates
 library(tibble)
 library(pcds)  # For intersecting lines and circles
+library(shadowtext)  # For text outline
 
 getwd()
 
 dir <- getwd()
+
+dir_results <- dir %>%
+  dirname() %>%
+  paste0(., "/DMC_results/") %T>%
+  dir.create()
 
 my_colors <- dir %>%
   paste0(., "/Floss_colors.txt") %>%
@@ -443,6 +449,10 @@ my_colors %<>%
     labcol = case_when(
       V > 5 ~ "black",
       .default = "white"
+    ),
+    labcol_outline = case_when(
+      V > 5 ~ "white",
+      .default = "black"
     )
   )
 
@@ -615,15 +625,16 @@ chroma_text_pos <- data.frame(
   HCy = seq(2, 18, 2)
 )
 
-my_colors %>%
+my_plot_HC_all <- my_colors %>%
+  arrange(V) %>%
   ggplot(
     aes(x = HCx, 
         y = HCy, 
         # color = I(HEX_mean), 
         # fill = I(HEX_mean)
-        ),
+    ),
     gr
-    ) +
+  ) +
   geom_circle(
     data = circle_min_center,
     color = NA,
@@ -653,20 +664,13 @@ my_colors %>%
   geom_text(
     data = chroma_text_pos,
     col = "grey",
-    fill = NA,
     aes(label = HCy)
   ) +
   geom_text(
     data = hue_lab_pts,
     col = "black",
     aes(label = hue_lab)) +
-  # geom_point(shape = 21, color = "black", size = 3, aes(fill = I(HEX_mean))) +
-  geom_voronoi_tile(
-    aes(fill = I(HEX_mean)),
-    color = 'black',
-    # normalize = TRUE,
-    max.radius = 0.5
-  ) +
+  geom_point(shape = 21, color = "black", size = 3, aes(fill = I(HEX_mean))) +
   coord_equal(xlim = my_xlims, ylim = my_ylims) +
   theme(
     axis.line = element_blank(),
@@ -683,14 +687,54 @@ my_colors %>%
     plot.background = element_blank()
   )
 
+my_plot_HC_all
+
 
 # Value slice
 
-my_colors %>%
+mindist_HC <- 1.2
+
+i <- 5
+
+my_colors_plot_i <- my_colors %>%
+  mutate(V_round = round(V)) %>%
   filter(
-    V > 4.5,
-    V < 5.5
+    V_round == i
+  )
+
+mindist_i <- my_colors_plot_i %>%
+  dplyr::select(HCx, HCy) %>%
+  mutate(
+    HCx = HCx*0.9,
+    HCy = HCy*1.8
   ) %>%
+  dist(
+    diag = FALSE,
+    upper = TRUE
+  ) %>%
+  as.matrix()
+
+diag(mindist_i) <- NA
+
+mindist_i %<>%
+  apply(1, function(x) {min(x, na.rm = TRUE)})
+
+my_colors_plot_i_text <- my_colors_plot_i %>%
+  mutate(
+    mindist_i = mindist_i
+  ) %>%
+  filter(mindist_i > 1)
+
+my_colors_plot_i_label <- my_colors_plot_i %>%
+  mutate(
+    mindist_i = mindist_i,
+    DMC = case_when(
+      mindist_i > 1 ~ "",
+      .default = DMC
+    )
+  )
+
+my_plot_HC_slice <- my_colors_plot_i %>%
   ggplot(
     aes(x = HCx, 
         y = HCy
@@ -710,7 +754,6 @@ my_colors %>%
     fill = NA,
     aes(x0 = HCx, y0 = HCy, r = r)
   ) +
-  geom_hline(color = "white", yintercept = 0) +
   geom_abline(intercept = 0, slope = tan(pi*-2.5/5), color = "white") +
   geom_abline(intercept = 0, slope = tan(pi*-1.5/5), color = "white") +
   geom_abline(intercept = 0, slope = tan(pi*-0.5/5), color = "white") +
@@ -738,10 +781,34 @@ my_colors %>%
     aes(fill = I(HEX_mean)),
     color = 'black',
     # normalize = TRUE,
-    max.radius = 0.5
+    max.radius = 1
     ) +
-  geom_text_repel(box.padding = 1, max.overlaps = Inf, color = "black",
-                  aes(label = DMC, color = "black")) +
+  # geom_text_repel(box.padding = 1, max.overlaps = Inf, color = "black",
+  #                 aes(label = DMC, color = "black")) +
+  # geom_shadowtext(
+  #   data = my_colors_plot_i_text,
+  #   aes(color = I(labcol), label = DMC, bg.colour = I(labcol_outline)),
+  #   size = 3
+  # ) +
+  geom_text_repel(
+    data = my_colors_plot_i,
+    aes(
+      label = DMC
+      # ,
+      # color = I(labcol),
+      # bg.color = I(labcol_outline),
+      # segment.colour = I(labcol_outline)
+      ),
+    box.padding = 0.15,
+    max.overlaps = Inf,
+    point.padding = NA,
+    size = 3,
+    min.segment.length = 0.3,
+    bg.r = 0.15,          # shadow radius
+    point.size = NA,
+    color = "white",
+    bg.color = "black"
+  ) +
   coord_equal(xlim = my_xlims, ylim = my_ylims) +
   theme(
     axis.line = element_blank(),
@@ -756,8 +823,34 @@ my_colors %>%
     panel.grid.major = element_blank(),
     panel.grid.minor = element_blank(),
     plot.background = element_blank()
-  )
+  ) +
+  ggtitle(paste0("Value = ", i))
 
+my_plot_HC_slice
+
+pdf(
+  file = paste0(dir_results, "HC_slice_test.pdf"),
+  height = 17/2.54,
+  width = 16/2.54
+)
+
+my_plot_HC_slice
+
+try(dev.off())
+try(dev.off())
+
+tiff(
+  file = paste0(dir_results, "HC_slice_test.tif"),
+  height = 17/2.54,
+  width = 16/2.54,
+  units = "in",
+  res = 300
+)
+
+my_plot_HC_slice
+
+try(dev.off())
+try(dev.off())
 
 # Old code
 # 
