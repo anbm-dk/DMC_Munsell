@@ -23,6 +23,7 @@ library(autoimage) # For rotating coordinates
 library(tibble)
 library(pcds)  # For intersecting lines and circles
 library(shadowtext)  # For text outline
+library(colorscience)
 
 getwd()
 
@@ -400,7 +401,7 @@ Hue_to_radians <- function(Hue) {
   return(radians)
 }
 
-Hue_to_radians(seq(0, 100, 10)) %>% plot()
+# Hue_to_radians(seq(0, 100, 10)) %>% plot()
 
 my_colors %<>%
   mutate(
@@ -441,6 +442,43 @@ my_xlims <- circle_min_center[, 1] %>%
 my_ylims <- circle_min_center[, 2] %>%
   unlist()  %>%
   add(c(-circle_min_radius - 2, circle_min_radius + 2))
+
+# Test color circle wedges
+
+MaxChromasForStandardMunsellHuesAndValues %>%
+  filter(V == 5) %>%
+  summarise(
+    min_C = min(MaximumChroma)
+  )
+
+circle_colors <- data.frame(
+  H = seq(2.5, 100, by = 2.5),
+  V = 5,
+  C = 10
+) %>%
+  as.matrix() %>%
+  MunsellToRGB() %>% 
+  extract2(3) %>%
+  rgb(maxColorValue = 255)
+
+color_circle_angles <- data.frame(
+  n = rep(1, length(circle_colors)),
+  start = -1*(c(Hue_angles, Hue_angles + pi) - pi/2 - pi/40),
+  end = -1*(c(Hue_angles, Hue_angles + pi) - pi/2 + pi/40)
+)
+
+color_circle_angles %>%
+  ggplot() +
+  geom_arc_bar(
+    aes(
+      x0 = 0, y0 = 0, r0 = 0, r = 1,
+      fill = I(circle_colors),
+      start = start,
+      end = end
+    ),
+    color = NA
+  ) +
+  coord_equal()
 
 # Label color
 
@@ -515,37 +553,17 @@ plot_colors_i <- my_colors %>%
     )
   ) %>%
   filter(
-    H_string %in% hstrings_i | (distH < 0.5 & distH > -0.5)
+    H_string %in% hstrings_i | abs(distH) < 0.5,
+    abs(distH) <= abs(distC)
   )
 
-mindist_i <- plot_colors_i %>%
-  dplyr::select(C, V) %>%
-  mutate(C = C*2) %>%
-dist(
-  diag = FALSE,
-  upper = TRUE
-) %>%
-  as.matrix()
-
-diag(mindist_i) <- NA
-
-mindist_i %<>%
-  apply(1, function(x) {min(x, na.rm = TRUE)})
-
-plot_colors_i_text <- plot_colors_i %>%
+plot_colors_i %<>%
+group_by(round(V), round(C)) %>%
   mutate(
-    mindist_i = mindist_i
+    rank = rank(abs(distH))
   ) %>%
-  filter(mindist_i > 0.5)
-
-plot_colors_i_label <- plot_colors_i %>%
-  mutate(
-    mindist_i = mindist_i,
-    DMC = case_when(
-      mindist_i > 0.5 ~ "",
-      .default = DMC
-    )
-  )
+  ungroup() %>%
+  filter(H_string %in% hstrings_i | rank == 1)
 
 plot_colors_i %>%
   ggplot(
@@ -558,26 +576,27 @@ plot_colors_i %>%
       group = -1L
       )
   ) +
-  # geom_point(size = 10, shape = 21, color = "black") +
   geom_voronoi_tile(
     aes(fill = I(HEX_mean)),
     color = 'black',
     # normalize = TRUE,
     max.radius = 0.5
   ) +
-  geom_text(
-    data = plot_colors_i_text,
-    aes(color = I(labcol)),
-    size = 3
-  ) +
   geom_text_repel(
-    data = plot_colors_i_label, 
-    box.padding = 0.5,
+    data = plot_colors_i,
+    aes(
+      label = DMC
+    ),
+    box.padding = 0.15,
     max.overlaps = Inf,
-    point.padding = 0.75,
+    point.padding = NA,
     size = 3,
-    min.segment.length = 0
-    ) +
+    min.segment.length = 0.3,
+    bg.r = 0.15,          # shadow radius
+    point.size = NA,
+    color = "white",
+    bg.color = "black"
+  ) +
   ylim(c(-0.5, 10.5)) +
   coord_fixed(1)
 
@@ -612,7 +631,7 @@ hue_lab_pts
 
 # Circles for chroma scale
 
-extra_cirlces <- data_frame(
+extra_cirlces <- base::data.frame(
   HCx = 0,
   HCy = 0,
   r = seq(2, 18, 2)
@@ -634,6 +653,17 @@ my_plot_HC_all <- my_colors %>%
         # fill = I(HEX_mean)
     ),
     gr
+  ) +
+  geom_arc_bar(
+    data = color_circle_angles,
+    aes(
+      x0 = 0, y0 = 0, r0 = 0, r = 20,
+      fill = I(circle_colors),
+      start = start,
+      end = end
+    ),
+    color = NA,
+    inherit.aes = FALSE
   ) +
   geom_circle(
     data = circle_min_center,
@@ -851,6 +881,12 @@ my_plot_HC_slice
 
 try(dev.off())
 try(dev.off())
+
+
+
+
+
+
 
 # Old code
 # 
