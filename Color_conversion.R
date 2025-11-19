@@ -1,10 +1,21 @@
 # Calculation and illustration of MUnsell colors for DMC floss
 
 # To do:
-# - Fix color labels/text positions
-# - Add hue labels to value slices ("radial" plots)
-# - Fix aspect ratio for hue slices.
-# - Create chroma slices
+# General:
+# - Fix color labels/text positions [ok].
+# - Make translations for Danish.
+# - Indicate extent of color space on charts [?].
+# Value slices:
+# - Add hue labels to value slices ("radial" plots).
+# - Add color ring to value slices.
+# - Add darkest/lightest color slices.
+# Hue slices:
+# - Fix aspect ratio for hue slices [ok].
+# Chroma slices:
+# - Create chroma slices.
+# - Figure for neutral colors.
+# - Figure for most intense colors.
+
 
 library(magrittr)
 library(dplyr)
@@ -24,6 +35,7 @@ library(tibble)
 library(pcds)  # For intersecting lines and circles
 library(shadowtext)  # For text outline
 library(colorscience)
+library(colorspace)
 
 getwd()
 
@@ -323,46 +335,47 @@ left_join(
 #     Source != "Hex_SP"
 #   )
 
-# Convert to XYZ 
+# Convert to LAB
 
-my_colors_XYZ <- my_colors_RGB %>%
+my_colors_LAB <- my_colors_RGB %>%
   dplyr::select(R, G, B) %>%
-  as.matrix() %>%
-  XYZfromRGB(maxSignal = 255) %>%
-  extract2(2)
+  as.matrix() %>% 
+  divide_by(255) %>%
+  sRGB() %>%
+  as("LAB") %>% 
+  slot("coords") %>%
+  as.data.frame()
 
-# plot(as.data.frame(my_colors_XYZ))
+# plot(my_colors_LAB)
 
-my_colors_XYZ <- bind_cols(my_colors_RGB, my_colors_XYZ)
-
-head(my_colors_XYZ)
-
-my_colors_XYZ_mean <- my_colors_XYZ %>%
+my_colors_LAB_mean <- my_colors_RGB %>%
+  select(DMC) %>%
+  bind_cols(my_colors_LAB) %>%
   group_by(DMC) %>%
   summarise(
-    X = mean(X),
-    Y = mean(Y),
-    Z = mean(Z)
+    L = mean(L),
+    A = mean(A),
+    B = mean(B)
   )
 
-# plot(my_colors_XYZ_mean)
+plot(my_colors_LAB_mean)
 
 # Calculate HEX for mean values
 
-HEX_mean <- my_colors_XYZ_mean %>%
+HEX_mean <- my_colors_LAB_mean %>%
   dplyr::select(-DMC) %>%
   as.matrix() %>%
-  RGBfromXYZ(maxSignal = 255) %>%
-  extract2(1) %>%
+  LAB() %>%
+  as("sRGB") %>%
+  slot("coords") %>%
+  replace(. > 1, 1) %>%
   as.data.frame() %>%
   mutate(
-    HEX = rgb(R, G, B, maxColorValue = 255)
+    HEX = rgb(R, G, B, maxColorValue = 1)
   ) %>%
   dplyr::select(HEX) %>%
   unlist() %>%
   unname()
-
-my_colors_XYZ_mean$HEX <- HEX_mean
 
 # Plot average colors
 
@@ -424,7 +437,7 @@ points(my_colors$HCx, my_colors$HCy)
 circle_min_center <- circle_min %>% 
   st_centroid() %>%
   as.vector() %>%
-  round() %>%
+  # round() %>%
   t() %>%
   as.data.frame() %>%
   set_colnames(c("HCx", "HCy"))
@@ -433,7 +446,8 @@ circle_min_radius <- circle_min %>%
   st_area() %>%
   divide_by(pi) %>%
   sqrt() %>%
-  ceiling()
+  # ceiling() %>%
+  add(1)
 
 my_xlims <- circle_min_center[, 1] %>%
   unlist() %>%
@@ -442,6 +456,16 @@ my_xlims <- circle_min_center[, 1] %>%
 my_ylims <- circle_min_center[, 2] %>%
   unlist()  %>%
   add(c(-circle_min_radius - 2, circle_min_radius + 2))
+
+# Hues for plotting
+
+Huestrings <- HueStringFromNumber(seq(2.5, 100, by = 2.5))
+
+Huestrings
+
+Hue_angles <- Hue_to_radians(seq(2.5, 50, by = 2.5))
+
+Hue_angles
 
 # Test color circle wedges
 
@@ -480,39 +504,20 @@ color_circle_angles %>%
   ) +
   coord_equal()
 
-# Label color
-
-my_colors %<>%
-  mutate(
-    labcol = case_when(
-      V > 5 ~ "black",
-      .default = "white"
-    ),
-    labcol_outline = case_when(
-      V > 5 ~ "white",
-      .default = "black"
-    )
-  )
-
+# Histograms of Munsell dimensions
 
 hist(my_colors$H)
 hist(my_colors$V)
 hist(my_colors$C)
+
+# Munsell names
 
 my_colors %>%
   dplyr::select(H, V, C) %>%
   as.matrix() %>%
   MunsellNameFromHVC()
 
-# Hues for plotting
-
-Huestrings <- HueStringFromNumber(seq(2.5, 100, by = 2.5))
-
-Huestrings
-
-Hue_angles <- Hue_to_radians(seq(2.5, 50, by = 2.5))
-
-Hue_angles
+# Hue strings in data frame
 
 my_colors %<>%
   mutate(
@@ -522,6 +527,8 @@ my_colors %<>%
         )
   )
 
+# Test hue/chroma coordinate rotations
+
 my_colors %>%
   dplyr::select(HCx, HCy) %>% head()
 
@@ -530,6 +537,7 @@ my_colors %>%
   as.matrix() %>%
   rotate(theta = pi/2, pivot = c(0,0)) %>% head()
 
+# Hue slice
 
 i <- 8
 
@@ -555,10 +563,8 @@ plot_colors_i <- my_colors %>%
   filter(
     H_string %in% hstrings_i | abs(distH) < 0.5,
     abs(distH) <= abs(distC)
-  )
-
-plot_colors_i %<>%
-group_by(round(V), round(C)) %>%
+  ) %>%
+  group_by(round(V), round(C)) %>%
   mutate(
     rank = rank(abs(distH))
   ) %>%
@@ -657,7 +663,7 @@ my_plot_HC_all <- my_colors %>%
   geom_arc_bar(
     data = color_circle_angles,
     aes(
-      x0 = 0, y0 = 0, r0 = 0, r = 20,
+      x0 = 0, y0 = 0, r0 = 0, r = 30,
       fill = I(circle_colors),
       start = start,
       end = end
@@ -677,7 +683,6 @@ my_plot_HC_all <- my_colors %>%
     fill = NA,
     aes(x0 = HCx, y0 = HCy, r = r)
   ) +
-  geom_hline(color = "white", yintercept = 0) +
   geom_abline(intercept = 0, slope = tan(pi*-2.5/5), color = "white") +
   geom_abline(intercept = 0, slope = tan(pi*-1.5/5), color = "white") +
   geom_abline(intercept = 0, slope = tan(pi*-0.5/5), color = "white") +
