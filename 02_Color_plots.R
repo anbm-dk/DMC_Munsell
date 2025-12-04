@@ -100,7 +100,7 @@ circle_min_radius <- circle_min %>%
   divide_by(pi) %>%
   sqrt() %>%
   # ceiling() %>%
-  add(1)
+  add(1.1)
 
 my_xlims <- circle_min_center[, 1] %>%
   unlist() %>%
@@ -122,16 +122,19 @@ Hue_angles
 
 # Test color circle wedges
 
-MaxChromasForStandardMunsellHuesAndValues %>%
-  filter(V == 5) %>%
+V_colorcircle <- 9
+
+C_colorcircle <- MaxChromasForStandardMunsellHuesAndValues %>%
+  filter(V == V_colorcircle) %>%
   summarise(
     min_C = min(MaximumChroma)
-  )
+  ) %>%
+  floor()
 
 circle_colors <- data.frame(
   H = seq(2.5, 100, by = 2.5),
-  V = 5,
-  C = 10
+  V = V_colorcircle,
+  C = C_colorcircle
 ) %>%
   as.matrix() %>%
   MunsellToRGB() %>% 
@@ -192,6 +195,7 @@ my_colors %>%
 
 # Hue slices
 
+xlims_hslice <- matrix(numeric(), ncol = 2, nrow = length(Hue_angles))
 hue_slices <- list()
 
 for (i in 1:length(Hue_angles)) {
@@ -227,6 +231,15 @@ for (i in 1:length(Hue_angles)) {
     ungroup() %>%
     filter(H_string %in% hstrings_i | rank == 1)
   
+  xlims_hslice[i, 1] <- min(plot_colors_i$C, na.rm = TRUE)
+  xlims_hslice[i, 2] <- max(plot_colors_i$C, na.rm = TRUE)
+  
+  x_middle <- (xlims_hslice[i, 2] + xlims_hslice[i, 1])/2
+  xlims_i <- c(
+    x_middle - 11.37237 - 0.55,
+    x_middle + 11.37237 + 0.55
+  )
+  
   hue_slices[[i]] <- plot_colors_i %>%
     ggplot(
       aes(
@@ -260,12 +273,18 @@ for (i in 1:length(Hue_angles)) {
       bg.color = "black"
     ) +
     ylim(c(-0.55, 10.55)) +
-    xlim(c(min(plot_colors_i$C) - 0.55, max(plot_colors_i$C) + 0.55)) +
+    xlim(
+      # c(min(plot_colors_i$C) - 0.55, max(plot_colors_i$C) + 0.55)
+      xlims_i
+      ) +
     coord_fixed(1, expand = FALSE) +
     ggtitle(
       paste0("Hues ", hstrings_i[2], " (left) and ", hstrings_i[1], " (right)")
     )
 }
+
+max(xlims_hslice[, 2] - xlims_hslice[, 1]) / 2
+# [1] 11.37237
 
 hue_slices[[8]]
 
@@ -395,6 +414,8 @@ chroma_text_pos <- data.frame(
   HCy = seq(0, 18, 2)
 )
 
+# Plot of Hue/Chroma for all colors
+
 my_plot_HC_all <- my_colors %>%
   arrange(V) %>%
   ggplot(
@@ -433,7 +454,7 @@ my_plot_HC_all <- my_colors %>%
   ) +
   geom_circle(
     data = circle_min_center,
-    color = NA,
+    color = "white",
     fill = "grey92",
     aes(x0 = HCx, y0 = HCy, r = circle_min_radius)
   ) +
@@ -488,7 +509,7 @@ my_plot_HC_all <- my_colors %>%
 my_plot_HC_all
 
 
-# Value slice
+# Value slices
 
 mindist_HC <- 1.2
 
@@ -499,16 +520,28 @@ my_colors %>%
   pull(v_round) %>%
   unique()
 
+V_rounded_unique <- my_colors %>%
+  mutate(
+    v_round = round(V*2)/2
+  ) %>%
+  pull(v_round) %>%
+  unique() %>%
+  sort()
+
 value_slices <- list()
 
-for(i in 1:10) {
+for(i in 3:length(V_rounded_unique)) {
   
   # i <- 5
+  V_rounded_i <- V_rounded_unique[i]
   
   my_colors_plot_i <- my_colors %>%
-    mutate(V_round = round(V)) %>%
+    mutate(
+      # V_round = round(V)
+      v_round = round(V*2)/2
+      ) %>%
     filter(
-      V_round == i
+      v_round == V_rounded_i
     )
   
   # mindist_i <- my_colors_plot_i %>%
@@ -580,7 +613,7 @@ for(i in 1:10) {
     ) +
     geom_circle(
       data = circle_min_center,
-      color = NA,
+      color = "white",
       fill = "grey92",
       aes(x0 = HCx, y0 = HCy, r = circle_min_radius)
     ) +
@@ -618,7 +651,8 @@ for(i in 1:10) {
     geom_voronoi_tile(
       aes(fill = I(HEX_mean)),
       color = 'black',
-      max.radius = 1
+      max.radius = 1,
+      linewidth = 1/4
     ) +
     geom_text_repel(
       data = my_colors_plot_i,
@@ -630,10 +664,10 @@ for(i in 1:10) {
       point.padding = NA,
       size = 3,
       min.segment.length = 0.3,
-      bg.r = 0.1,          # shadow radius
+      bg.r = 0.075,          # shadow radius
       point.size = NA,
       color = "white",
-      bg.color = "black"
+      bg.color = "grey20"
     ) +
     coord_equal(xlim = my_xlims, ylim = my_ylims) +
     theme(
@@ -650,11 +684,11 @@ for(i in 1:10) {
       panel.grid.minor = element_blank(),
       plot.background = element_blank()
     ) +
-    ggtitle(paste0("Value = ", i))
+    ggtitle(paste0("Value = ", V_rounded_i))
 }
 
 
-value_slices[[5]]
+value_slices[[10]]
 
 pdf(
   file = paste0(dir_results, "HC_slice_test.pdf"),
@@ -662,7 +696,7 @@ pdf(
   width = 16/2.54
 )
 
-value_slices[[5]]
+value_slices[[10]]
 
 try(dev.off())
 try(dev.off())
@@ -675,7 +709,7 @@ tiff(
   res = 300
 )
 
-value_slices[[5]]
+value_slices[[10]]
 
 try(dev.off())
 try(dev.off())
