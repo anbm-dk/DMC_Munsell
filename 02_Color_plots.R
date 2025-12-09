@@ -216,17 +216,10 @@ for (i in 1:length(Hue_angles)) {
     mutate(
       distH = y_i,
       distC = x_i,
-      # C = case_when(
-      #   H_string == hstrings_i[2] ~ C*(-1),
-      #   !(H_string %in% hstrings_i[1:2]) ~ distC,
-      #   .default = C
-      # )
       C = distC
     ) %>%
     filter(
       H_string %in% hstrings_i[1:2] | abs(distH) < 0.5
-      # ,
-      # abs(distH) <= abs(distC)
     ) %>%
     group_by(round(V), round(C/asp_VC)) %>%
     mutate(
@@ -309,14 +302,13 @@ for (i in 1:length(Hue_angles)) {
     geom_vline(xintercept = xbreaks_i, color = "white") +
     geom_voronoi_tile(
       aes(fill = I(HEX_mean)),
-      color = 'black',
+      color = "grey20",
       # max.radius = 0.5,
       max.radius = 0.05,
       # *asp_VC,
       linewidth = 1/4,
       normalize = TRUE,
-      bound = c(xlims_i, -0.55, 10.55)
-      ,
+      bound = c(xlims_i, -0.55, 10.55),
       asp.ratio = 1 / (asp_voronoi * asp_VC)
     ) +
     geom_text_repel(
@@ -329,12 +321,12 @@ for (i in 1:length(Hue_angles)) {
       point.padding = NA,
       size = 2.5,
       min.segment.length = 0.3,
-      bg.r = 0.15,          # shadow radius
+      bg.r = 0.0625,
       point.size = NA,
       color = "white",
-      bg.color = "black"
+      bg.color = "grey20"
     ) +
-    coord_fixed(1.769912, expand = FALSE) +
+    coord_fixed(asp_VC, expand = FALSE) +
     ggtitle(
       paste0("Hues ", hstrings_i[2], " (left) and ", hstrings_i[1], " (right)")
     ) +
@@ -594,44 +586,11 @@ for(i in 3:length(V_rounded_unique)) {
   
   my_colors_plot_i <- my_colors %>%
     mutate(
-      # V_round = round(V)
       v_round = round(V*2)/2
       ) %>%
     filter(
       v_round == V_rounded_i
     )
-  
-  # mindist_i <- my_colors_plot_i %>%
-  #   dplyr::select(HCx, HCy) %>%
-  #   mutate(
-  #     HCx = HCx*0.9,
-  #     HCy = HCy*1.8
-  #   ) %>%
-  #   dist(
-  #     diag = FALSE,
-  #     upper = TRUE
-  #   ) %>%
-  #   as.matrix()
-  # 
-  # diag(mindist_i) <- NA
-  # 
-  # mindist_i %<>%
-  #   apply(1, function(x) {min(x, na.rm = TRUE)})
-  # 
-  # my_colors_plot_i_text <- my_colors_plot_i %>%
-  #   mutate(
-  #     mindist_i = mindist_i
-  #   ) %>%
-  #   filter(mindist_i > 1)
-  # 
-  # my_colors_plot_i_label <- my_colors_plot_i %>%
-  #   mutate(
-  #     mindist_i = mindist_i,
-  #     DMC = case_when(
-  #       mindist_i > 1 ~ "",
-  #       .default = DMC
-  #     )
-  #   )
   
   value_slices[[i]] <- my_colors_plot_i %>%
     ggplot(
@@ -707,7 +666,7 @@ for(i in 3:length(V_rounded_unique)) {
     ) +
     geom_voronoi_tile(
       aes(fill = I(HEX_mean)),
-      color = 'black',
+      color = "grey20",
       max.radius = 1,
       linewidth = 1/4
     ) +
@@ -747,19 +706,8 @@ for(i in 3:length(V_rounded_unique)) {
 
 value_slices[[10]]
 
-pdf(
-  file = paste0(dir_results, "HC_slice_test.pdf"),
-  height = 17/2.54,
-  width = 16/2.54
-)
-
-value_slices[[10]]
-
-try(dev.off())
-try(dev.off())
-
 tiff(
-  file = paste0(dir_results, "HC_slice_test.tif"),
+  file = paste0(dir_results, "Value_sclice_test.tif"),
   height = 17/2.54,
   width = 16/2.54,
   units = "in",
