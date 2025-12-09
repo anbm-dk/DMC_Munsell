@@ -185,6 +185,8 @@ my_colors %<>%
 
 # Test hue/chroma coordinate rotations
 
+asp_VC <- 1.769912
+
 my_colors %>%
   dplyr::select(HCx, HCy) %>% head()
 
@@ -214,17 +216,19 @@ for (i in 1:length(Hue_angles)) {
     mutate(
       distH = y_i,
       distC = x_i,
-      C = case_when(
-        H_string == hstrings_i[2] ~ C*(-1),
-        !(H_string %in% hstrings_i[1:2]) ~ distC,
-        .default = C
-      )
+      # C = case_when(
+      #   H_string == hstrings_i[2] ~ C*(-1),
+      #   !(H_string %in% hstrings_i[1:2]) ~ distC,
+      #   .default = C
+      # )
+      C = distC
     ) %>%
     filter(
-      H_string %in% hstrings_i | abs(distH) < 0.5,
-      abs(distH) <= abs(distC)
+      H_string %in% hstrings_i[1:2] | abs(distH) < 0.5
+      # ,
+      # abs(distH) <= abs(distC)
     ) %>%
-    group_by(round(V), round(C)) %>%
+    group_by(round(V), round(C/asp_VC)) %>%
     mutate(
       rank = rank(abs(distH))
     ) %>%
@@ -236,9 +240,49 @@ for (i in 1:length(Hue_angles)) {
   
   x_middle <- (xlims_hslice[i, 2] + xlims_hslice[i, 1])/2
   xlims_i <- c(
-    x_middle - 11.37237 - 0.55,
-    x_middle + 11.37237 + 0.55
+    x_middle - 11.37237 - (0.55*asp_VC),
+    x_middle + 11.37237 + (0.55*asp_VC)
   )
+  
+  x_bounds_voronoi <- plot_colors_i %>%
+    summarise(
+      min_x = min(C) - (0.55*asp_VC),
+      max_x = max(C) + (0.55*asp_VC)
+    ) %>%
+    unlist() %>%
+    unname()
+  
+  asp_voronoi <- plot_colors_i %>%
+    summarise(
+      min_x = min(C),
+      max_x = max(C),
+      min_y = min(V),
+      max_y = max(V)
+    ) %>%
+    mutate(
+      asp = (max_y - min_y) / (max_x - min_x)
+    ) %>%
+    pull(asp)
+  
+  bg_rects <- data.frame(
+    xstart = c(xlims_i[1], -0.5, 0.5), 
+    xend = c(-0.5, 0.5, xlims_i[2]),
+    rect_color = c(circle_colors[i + 20], "grey90", circle_colors[i])
+  )
+  
+  xbreaks_i <- seq(
+    ceiling(xlims_i[1]/4),
+    floor(xlims_i[2]/4),
+    1
+  ) %>%
+    multiply_by(4)
+  
+  xbreaks_minor_i <- seq(
+    ceiling(xlims_i[1]/2),
+    floor(xlims_i[2]/2),
+    1
+  ) %>%
+    multiply_by(2)
   
   hue_slices[[i]] <- plot_colors_i %>%
     ggplot(
@@ -251,11 +295,29 @@ for (i in 1:length(Hue_angles)) {
         group = -1L
       )
     ) +
+    geom_rect(
+      data = bg_rects, 
+      aes(ymin = -0.55, 10.55, 
+          ymax = 10.55, 
+          xmin = xstart,
+          xmax = xend, 
+          fill = I(rect_color)), 
+      alpha = 0.5,
+      inherit.aes = FALSE
+      ) + 
+    geom_hline(yintercept = seq(0, 10, 2), color = "white") +
+    geom_vline(xintercept = xbreaks_i, color = "white") +
     geom_voronoi_tile(
       aes(fill = I(HEX_mean)),
       color = 'black',
-      max.radius = 0.5,
-      linewidth = 1/4
+      # max.radius = 0.5,
+      max.radius = 0.05,
+      # *asp_VC,
+      linewidth = 1/4,
+      normalize = TRUE,
+      bound = c(xlims_i, -0.55, 10.55)
+      ,
+      asp.ratio = 1 / (asp_voronoi * asp_VC)
     ) +
     geom_text_repel(
       data = plot_colors_i,
@@ -272,36 +334,31 @@ for (i in 1:length(Hue_angles)) {
       color = "white",
       bg.color = "black"
     ) +
-    ylim(c(-0.55, 10.55)) +
-    xlim(
-      # c(min(plot_colors_i$C) - 0.55, max(plot_colors_i$C) + 0.55)
-      xlims_i
-      ) +
-    coord_fixed(1, expand = FALSE) +
+    coord_fixed(1.769912, expand = FALSE) +
     ggtitle(
       paste0("Hues ", hstrings_i[2], " (left) and ", hstrings_i[1], " (right)")
-    )
+    ) +
+    scale_y_continuous(
+      breaks = seq(0, 10, 2),
+      limits = c(-0.55, 10.55)
+      ) +
+    scale_x_continuous(
+      breaks = xbreaks_i, 
+      minor_breaks = xbreaks_minor_i,
+      limits = xlims_i
+      ) +
+    xlab("Chroma") +
+    ylab("Value")
 }
 
 max(xlims_hslice[, 2] - xlims_hslice[, 1]) / 2
 # [1] 11.37237
 
-hue_slices[[8]]
-
-pdf(
-  file = paste0(dir_results, "Hue_slice_test.pdf"),
-  height = 10/2.54,
-  width = 16/2.54
-)
-
-hue_slices[[8]]
-
-try(dev.off())
-try(dev.off())
+hue_slices[[20]]
 
 tiff(
   file = paste0(dir_results, "Hue_slice_test.tif"),
-  height = 10/2.54,
+  height = 12/2.54,
   width = 16/2.54,
   units = "in",
   res = 300
@@ -314,7 +371,7 @@ try(dev.off())
 
 pdf(
   file = paste0(dir_results, "Hue_slices_all.pdf"),
-  height = 10/2.54,
+  height = 12/2.54,
   width = 16/2.54
   )
 
